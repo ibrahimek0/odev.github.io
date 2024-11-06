@@ -1,0 +1,411 @@
+---
+title: "Ödev 1: Uzay Gemisi Titanik"
+---
+
+# Uzay Gemisi Titanic Projesi
+
+Veri bilimini korumanın kozmik bir gizemi çözmek için gerekli olduğu 2912 yılında hoş geldiniz. Dört ışık yılı öteden bir iletilen ve işler iyi görünmüyor.
+
+Uzay Gemisi Titanic, bir ay önce fırlatılan bir yıldızlararası yolcu yolculuğuydu. Gemide yaklaşık 13.000 yolcuyla, geminin ilk yolculuğuna çıktı ve göçmenleri güneş sistemimizden yakın yıldızların dönüşünde dönen üç yeni yaşanabilir dış gezegene taşındı.
+
+İlk varış noktası olan yakıcı 55 Cancri E'ye doğru yolda Alpha Centauri'yi dönerken, dikkatsiz Uzay Gemisi Titanik, bir toz bulutunun içinde saklı bir uzay-zaman anomalisiyle çarpıştı. Ne yazık ki, 1000 yıl önceki ismin babasıyla aynı kaderi paylaştı. Gemi sağlam kalsa da, yolcuların neredeyse ortasında alternatif bir boyuta taşındı.
+
+train.csv Eğitim verisi olarak kullanılacak yolcuların yaklaşık üç ikisine (~8700) ait kişisel kayıtlar.
+PassengerId Her yolcu için benzersiz bir kimlik. Kimliği, yolcunun seyahat ettiği ve gruptaki numarasını gggg_pp gösteren bir form grubu alır. Bir gruptaki kişiler genellikle aile üyeleridir, ancak her zaman değil.
+HomePlanet Yolcunun ekonomik gezegeni, genellikle daimi ikamet ettiği gezegen.
+CryoSleep Yolcunun duraklama süresinin sona erme hareketini almayı seçmeyi seçmediğini belirtir. Kriyo uykudaki yolcu kabinlerine kapatılır.
+Kabin yolcusunun kabin numarası. Şeklindedirdeck/num/side, Liman veya Sancak için sideolabilir.PS Destinasyon-Yolcunun ineceği gezegen.
+Yaş Yolcunun yaşı.
+VIP Yolcunun seyahati sırasında özel VIP hizmeti için ödemelerin yapılmadığı.
+RoomService , FoodCourt , Alışveriş Merkezi , Spa , VRDeck Uzay Gemisi Titanic'in birçok lüks konaklama için yolcunun ödediği tutar.
+İsim Yolcunun adı ve soyadı.
+Taşınan yolcunun başka bir boyuta taşınıp taşınmadığı. Bu hedefi tahmin etmeye çalışmak sütununda yer alır.
+
+library(readr)
+train <- read_csv("data/train.csv")
+test <- read_csv("data/test.csv")
+
+library(explore)
+
+describe_all(train)
+
+describe_all(test)
+
+# Veri Önişleme
+
+Yolcu kimliği
+Her yolcu için benzersiz bir kimlik. Her kimlik, gggg_pp biçimini alır; burada gggg, yolcunun seyahat ettiği grubu belirtir ve pp, gruptaki numaradır. Bir gruptaki kişiler genellikle aile üyeleridir, ancak her zaman değil.
+
+Onun yolcusu için benzersiz bir kimlik. Onun kimlik gggg_pp'sini alır; burada gggg, yolcunun birlikte seyahat ettiği grubu belirtir ve pp, grubun içindeki numaradır. Bir gruptaki insanların çoğu aile üyeleridir, ancak her zaman değil.
+
+head(train$PassengerId)
+
+library(stringr)
+
+train[c("ailenum", "ailesira")] <- str_split_fixed(train$PassengerId, "_", 2)
+
+test[c("ailenum", "ailesira")] <- str_split_fixed(test$PassengerId, "_", 2)
+
+head(train[, c("PassengerId","ailenum", "ailesira")])
+
+library(tidyverse)
+
+train <- train %>%
+  group_by(ailenum) %>%
+  mutate(tek_basina = ifelse(n() == 1, 1, 0)) %>%
+  ungroup()
+  
+  test <- test %>%
+  group_by(ailenum) %>%
+  mutate(tek_basina = ifelse(n() == 1, 1, 0)) %>%
+  ungroup()
+  
+  train <- train %>% select(-ailenum,-ailesira)
+test <- test %>% select(-ailenum,-ailesira)
+
+train$tek_basina <- as.factor(train$tek_basina)
+test$tek_basina <- as.factor(test$tek_basina)
+
+summary(train$tek_basina)
+
+# Kabin
+
+Yolcunun kaldığı kabin numarası. deck/num/side formunu alır, burada side, P (Sunboard) veya S (Pan) olabilir.
+
+Yolcunun kaldığı kabin numarası. Güverte/numara/yan birleştirilir; burada taraf, İskele için P veya Sancak için S olabilir.
+
+head(train$Cabin)
+
+train[c('deck', 'num', 'side')] <- str_split_fixed(train$Cabin, '/', 3)
+
+test[c('deck', 'num', 'side')] <- str_split_fixed(test$Cabin, '/', 3)
+
+head(train[, c("Cabin","deck", "num", "side")])
+
+train[train == ""] <- NA
+test[test == ""] <- NA
+
+train <- train %>% select(-Cabin)
+test <- test %>% select(-Cabin)
+
+summary(as.factor(train$deck))
+
+train$deck[train$deck %in% c("T", "NA")] <- "Other"
+test$deck[test$deck %in% c("T", "NA")] <- "Other"
+train$deck[is.na(train$deck)] <- "Other"
+test$deck[is.na(test$deck)] <- "Other"
+
+summary(as.factor(train$deck))
+
+describe_all(train)
+
+train <- train %>% select(-Name, -num)
+test <- test %>% select(-Name, -num)
+
+train <- train %>%
+  mutate_if(is.logical, as.factor) %>%   # Convert logical columns to factors
+  mutate(across(where(is.character) & !all_of("PassengerId"), as.factor))      # Convert character columns to factors
+
+test <- test %>%
+  mutate_if(is.logical, as.factor) %>%   # Convert logical columns to factors
+  mutate(across(where(is.character) & !all_of("PassengerId"), as.factor))      # Convert character columns to factors
+  
+  summary(train)
+  
+  summary(test)
+  
+# Yaş
+
+library(ggplot2)
+
+# Create a ggplot object for train dataset
+p_train <- ggplot(train, aes(x = Age)) +
+  geom_histogram(fill = "blue", alpha = 0.5, bins = 20) +
+  labs(title = "Train Dataset", x = "Age", y = "Count") +
+  theme_minimal()
+
+# Create a ggplot object for test dataset
+p_test <- ggplot(test, aes(x = Age)) +
+  geom_histogram(fill = "red", alpha = 0.5, bins = 20) +
+  labs(title = "Test Dataset", x = "Age", y = "Count") +
+  theme_minimal()
+  
+  library(gridExtra)
+  
+  grid.arrange(p_train, p_test, ncol = 2)
+  
+  # Create the histogram for both datasets in one plot without combining
+ggplot() +
+  geom_histogram(data = train, aes(x = Age, fill = "Train"), 
+                 position = "identity", alpha = 0.5, bins = 20) +
+  geom_histogram(data = test, aes(x = Age, fill = "Test"), 
+                 position = "identity", alpha = 0.5, bins = 20) +
+  labs(title = "Histogram of Age Variable",
+       x = "Age",
+       y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(name = "Dataset", values = c("Train" = "blue", "Test" = "red"))
+  
+  
+  arning: Removed 179 rows containing non-finite outside the scale range
+(`stat_bin()`).
+Warning: Removed 91 rows containing non-finite outside the scale range
+(`stat_bin()`).
+
+# Ana Gezegen
+
+summary(train$HomePlanet)
+
+summary(test$HomePlanet)
+
+# Create a ggplot object for train dataset
+p_hptrain <- ggplot(train, aes(x = HomePlanet)) +
+  geom_bar(fill = "blue", alpha = 0.5) +
+  labs(title = "Train Dataset", x = "Home Planet", y = "Count") +
+  theme_minimal()
+
+# Create a ggplot object for test dataset
+p_hptest <- ggplot(test, aes(x = HomePlanet)) +
+  geom_bar(fill = "red", alpha = 0.5) +
+  labs(title = "Test Dataset", x = "Home Planet", y = "Count") +
+  theme_minimal()
+  
+  grid.arrange(p_hptrain, p_hptest, ncol = 2)
+  
+  # Create the histogram for both datasets in one plot without combining
+ggplot() +
+  geom_bar(data = train, aes(x = HomePlanet, fill = "Train"), 
+                 position = "identity", alpha = 0.5) +
+  geom_bar(data = test, aes(x = HomePlanet, fill = "Test"), 
+                 position = "identity", alpha = 0.5) +
+  labs(title = "Histogram of Age Variable",
+       x = "Home Planet",
+       y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(name = "Dataset", values = c("Train" = "blue", "Test" = "red"))
+  
+# Taşındı
+
+ggplot(train, aes(x = Transported)) +
+  geom_bar(fill = "blue", alpha = 0.5) +
+  labs(title = "Train Dataset", x = "Transported", y = "Count") +
+  theme_minimal()
+  
+  library(tidymodels)
+  
+  st_recipe <- recipe(Transported ~ ., data = train) %>% 
+  update_role(PassengerId, new_role = "ID") %>%
+  step_impute_knn(all_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>% 
+  step_dummy(all_nominal_predictors(), one_hot = TRUE)
+  
+  # Specify the logistic regression model
+logistic_model <- logistic_reg() %>%
+  set_engine("glm")
+  
+  # Create a workflow
+st_workflow <- workflow() %>%
+  add_recipe(st_recipe) %>%
+  add_model(logistic_model)
+  
+  # Fit the model directly with the workflow
+trained_model <- st_workflow %>%
+  fit(data = train)
+  
+  Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+  
+  # Prepare the test data and make predictions in one step
+predictions <- trained_model %>%
+  predict(new_data = test) %>%     # Directly pass the test data
+  bind_cols(test)                   # Bind the original test data for reference
+  
+  # Step 3: Extract the id from the test data and the predicted prices
+submission <- predictions %>% 
+  select(PassengerId = PassengerId, .pred_class = .pred_class) %>%  # Adjust this if the id is stored differently
+  rename(Transported = .pred_class)                # Rename predicted column if needed
+  
+  submission <- as.data.frame(submission)
+  
+  submission$Transported <- str_to_title(submission$Transported)
+  
+  write.csv(submission, "submission_logistic.csv", row.names = FALSE, quote = FALSE)
+  
+  rf_model <- rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
+
+set.seed(123)
+rf_wf <-
+  workflow() %>%
+  add_model(rf_model) %>% 
+  add_recipe(st_recipe)
+rf_wf
+
+══ Workflow ════════════════════════════════════════════════════════════════════
+Preprocessor: Recipe
+Model: rand_forest()
+
+── Preprocessor ────────────────────────────────────────────────────────────────
+3 Recipe Steps
+
+• step_impute_knn()
+• step_normalize()
+• step_dummy()
+
+── Model ───────────────────────────────────────────────────────────────────────
+Random Forest Model Specification (classification)
+
+Main Arguments:
+  mtry = tune()
+  trees = 1000
+  min_n = tune()
+
+Computational engine: ranger 
+
+set.seed(123)
+spaceship_val <- validation_split(train, 
+                               strata = Transported, 
+                               prop = 0.80)
+                               
+Warning: `validation_split()` was deprecated in rsample 1.2.0.
+ℹ Please use `initial_validation_split()` instead.   
+
+rf_results <-
+  rf_wf %>% 
+  tune_grid(resamples = spaceship_val,
+            grid = 25,
+            control = control_grid(save_pred = TRUE),
+            metrics = metric_set(accuracy)
+  )
+  
+  i Creating pre-processing data to finalize unknown parameter: mtry
+  
+  rf_results %>% 
+  collect_predictions()
+  
+  rf_results %>%
+  collect_metrics()
+  
+  param_final <- rf_results %>%
+  select_best(metric = "accuracy")
+param_final
+
+last_rf_model <- rand_forest(mtry = param_final$mtry, min_n = param_final$min_n, trees = 1000) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
+
+last_rf_wf <- rf_wf %>%
+  update_model(last_rf_model)
+
+last_rf_fit <- 
+  last_rf_wf %>% 
+  fit(train)
+  
+  test_pred <- predict(last_rf_fit, test)
+
+options(warn = getOption("warn"))
+test_pred_new <- test_pred %>% 
+  mutate(.pred_class = str_to_title(.pred_class))
+  
+  submission$Transported <- test_pred_new$.pred_class
+  
+  write_csv(submission, "submissionrf.csv")
+  
+  bt_cls_spec <- 
+    boost_tree(trees = 15) %>% 
+    # This model can be used for classification or regression, so set mode
+    set_mode("classification") %>% 
+    set_engine("xgboost")
+    
+    # Create a workflow
+st_workflow <- workflow() %>%
+  add_recipe(st_recipe) %>%
+  add_model(bt_cls_spec)
+  
+  # Fit the model directly with the workflow
+trained_model <- st_workflow %>%
+  fit(data = train)
+  
+  # Prepare the test data and make predictions in one step
+predictions <- trained_model %>%
+  predict(new_data = test) %>%     # Directly pass the test data
+  bind_cols(test)                   # Bind the original test data for reference
+  
+  # Step 3: Extract the id from the test data and the predicted prices
+submission <- predictions %>% 
+  select(PassengerId = PassengerId, .pred_class = .pred_class) %>%  # Adjust this if the id is stored differently
+  rename(Transported = .pred_class)                # Rename predicted column if needed
+  
+  submission <- as.data.frame(submission)
+  
+  submission$Transported <- str_to_title(submission$Transported)
+  
+  write.csv(submission, "submission_xg.csv", row.names = FALSE, quote = FALSE)
+  
+  svm_cls_spec <- 
+    svm_poly(cost = 1) %>% 
+    # This model can be used for classification or regression, so set mode
+    set_mode("classification") %>% 
+    set_engine("kernlab")
+    
+    # Create a workflow
+st_workflow <- workflow() %>%
+  add_recipe(st_recipe) %>%
+  add_model(svm_cls_spec)
+  
+  # Fit the model directly with the workflow
+trained_model <- st_workflow %>%
+  fit(data = train)
+  
+  Setting default kernel parameters  
+  
+  # Prepare the test data and make predictions in one step
+predictions <- trained_model %>%
+  predict(new_data = test) %>%     # Directly pass the test data
+  bind_cols(test)                   # Bind the original test data for reference
+  
+  # Step 3: Extract the id from the test data and the predicted prices
+submission <- predictions %>% 
+  select(PassengerId = PassengerId, .pred_class = .pred_class) %>%  # Adjust this if the id is stored differently
+  rename(Transported = .pred_class)                # Rename predicted column if needed
+  
+  submission <- as.data.frame(submission)
+  
+  submission$Transported <- str_to_title(submission$Transported)
+  
+  write.csv(submission, "submission_polysvm.csv", row.names = FALSE, quote = FALSE)
+  
+svm_cls_spec <- 
+  svm_rbf(cost = 1) %>% 
+  # This model can be used for classification or regression, so set mode
+  set_mode("classification") %>% 
+  set_engine("kernlab")
+  
+  # Create a workflow
+st_workflow <- workflow() %>%
+  add_recipe(st_recipe) %>%
+  add_model(svm_cls_spec)
+  
+  # Fit the model directly with the workflow
+trained_model <- st_workflow %>%
+  fit(data = train)
+  
+  # Prepare the test data and make predictions in one step
+predictions <- trained_model %>%
+  predict(new_data = test) %>%     # Directly pass the test data
+  bind_cols(test)                   # Bind the original test data for reference
+  
+  # Step 3: Extract the id from the test data and the predicted prices
+submission <- predictions %>% 
+  select(PassengerId = PassengerId, .pred_class = .pred_class) %>%  # Adjust this if the id is stored differently
+  rename(Transported = .pred_class)                # Rename predicted column if needed
+  
+  submission <- as.data.frame(submission)
+  
+  submission$Transported <- str_to_title(submission$Transported)
+  
+  write.csv(submission, "submission_rbfsvm.csv", row.names = FALSE, quote = FALSE)
+  
+  
+  
+  
